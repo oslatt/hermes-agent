@@ -1,0 +1,39 @@
+name: fish-audio
+version: 0.1.0
+manifest_version: 2
+api_version: 1
+description: "Official Fish Audio integration: expressive S2.1-Pro speech with emotion cues, multi-speaker dialogue, voice cloning and design, pronunciation control, streaming, and speech-to-text, plus skills that teach the agent to direct a performance."
+author: Fish Audio
+license: MIT
+homepage: https://fish.audio
+tags: [voice, tts, stt, speech]
+provides_tools:
+  - fish_speak
+  - fish_voices
+requires_env:
+  - name: FISH_API_KEY
+    description: "Fish Audio API key"
+    url: "https://fish.audio/app/api-keys"
+    secret: true
+python_dependencies:
+  - "msgpack>=1.0,<2"   # only for inline reference audio (zero-shot cloning)
+config_schema:
+  tts_model: {type: str, default: "s2.1-pro", choices: ["s2.1-pro", "s2.1-pro-free", "s2-pro", "drama-3-preview", "s1"], label: "Default model", description: "s2.1-pro for production; s2.1-pro-free is the same model at $0 for development."}
+  voice: {type: str, default: "", label: "Default voice", description: "Voice alias or 32-hex Fish voice id. Empty uses Fish's default voice."}
+  voices: {type: dict, default: {}, label: "Voice aliases", description: "Short name -> Fish voice id, e.g. {narrator: 802e3bc2b27e49c2995d23ef70e6ac89}."}
+  format: {type: str, default: "mp3", choices: ["mp3", "wav", "opus"], description: "Default output format for fish_speak."}
+  latency: {type: str, default: "normal", choices: ["normal", "balanced", "low"], description: "Quality/latency trade-off for files."}
+  stream_latency: {type: str, default: "balanced", choices: ["normal", "balanced", "low"], description: "Latency mode for streamed speech (voice mode)."}
+  temperature: {type: float, description: "0-1 expressiveness (Fish default 0.7)."}
+  top_p: {type: float, description: "0-1 sampling diversity (Fish default 0.7)."}
+  speed: {type: float, description: "Default pace 0.5-2.0."}
+  volume: {type: float, description: "Default loudness change in dB (-20 to 20)."}
+  normalize: {type: bool, default: true, description: "Expand numbers and dates (English/Chinese)."}
+  pronunciations: {type: dict, default: {}, description: "Word -> phonemes applied to every request (CMU Arpabet, pinyin, romaji)."}
+  pronunciation_dictionaries: {type: list, default: [], description: "Managed dictionaries: [{id, version}] from the Fish web app (max 3)."}
+  auto_expressive: {type: bool, default: false, description: "Let the host model add delivery cues to untagged speech (voice replies). Costs one extra LLM call per reply."}
+  stt_model: {type: str, default: "transcribe-1", choices: ["transcribe-1", "transcribe-1-pro"], description: "transcribe-1-pro adds speaker turns and emotion cues."}
+  base_url: {type: str, default: "https://api.fish.audio", description: "API endpoint (self-hosted or proxy)."}
+  timeout_seconds: {type: float, default: 120, description: "Per-request timeout."}
+  max_chars_per_request: {type: int, default: 3000, description: "Longer scripts are split at sentence boundaries."}
+  advanced: {type: dict, default: {}, description: "Extra TTS fields: repetition_penalty, chunk_length, min_chunk_length, max_new_tokens, condition_on_previous_chunks, early_stop_threshold, features, mp3_bitrate, opus_bitrate, sample_rate."}
