@@ -29,6 +29,18 @@ _REWRITE_PROMPT = (
     "Return only the rewritten script.")
 
 
+def _configured_voice(ctx: Any, settings: Settings, voice: Optional[str]) -> Optional[str]:
+    """``tts.voice`` is shared by every provider, so it may still name another engine's voice (an Edge
+    voice after switching to Fish). That is user config, not agent intent: fall back to the plugin's
+    default voice instead of failing speech."""
+    book = VoiceBook(ctx, settings)
+    try:
+        return book.resolve(voice)
+    except ValueError:
+        logger.warning("fish-audio: tts.voice %r is not a Fish voice id or alias; using the default voice", voice)
+        return book.resolve(None)
+
+
 def _setup_schema() -> Dict[str, Any]:
     return {"name": "Fish Audio", "badge": "expressive",
             "tag": "S2.1-Pro: emotion cues, dialogue, cloning, 83 languages",
@@ -105,7 +117,7 @@ class FishTTSProvider(TTSProvider):
         if markup.speaker_indices(text):  # the core tool is single-voice; dialogue belongs to fish_speak
             text = markup.strip_speaker_tokens(text)
         request = speech.build_request(
-            settings, text, voices=[VoiceBook(self.ctx, settings).resolve(voice)], model=model or None,
+            settings, text, voices=[_configured_voice(self.ctx, settings, voice)], model=model or None,
             direction=instructions, speed=speed, fmt=fish_format)
         for warning in request.warnings:
             logger.info("fish-audio: %s", warning)
@@ -117,7 +129,7 @@ class FishTTSProvider(TTSProvider):
         settings = Settings.load(self.ctx)
         text = markup.strip_speaker_tokens(markup.repair_control_tokens(text))
         fish_format = format if format in speech.FISH_FORMATS else "opus"
-        request = speech.build_request(settings, text, voices=[VoiceBook(self.ctx, settings).resolve(voice)],
+        request = speech.build_request(settings, text, voices=[_configured_voice(self.ctx, settings, voice)],
                                        model=model or None, fmt=fish_format, latency=settings.stream_latency)
         if sample_rate:
             request.body["sample_rate"] = int(sample_rate)

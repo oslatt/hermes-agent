@@ -18,6 +18,7 @@ from .settings import Settings, VoiceBook, get_api_key
 TOOLSET = "fish_audio"
 _VOICE_PLATFORMS = frozenset({"telegram", "matrix", "feishu", "whatsapp", "signal"})
 _MAX_REFERENCE_BYTES = 20 * 1024 * 1024
+_AUDIO_SUFFIXES = frozenset({".wav", ".mp3", ".flac", ".ogg", ".opus", ".m4a", ".aac", ".webm"})
 _MEDIA_DIRECTIVE_RE = re.compile(r"media:", re.IGNORECASE)
 _MODEL_IDS = list(MODELS)
 
@@ -166,7 +167,18 @@ def _checked_output_path(raw: str, ext: str) -> Path:
 
 
 def _read_reference(path: str) -> bytes:
+    """Local audio the user pointed at, uploaded to Fish: credential stores and non-audio files are
+    refused so a prompt injection cannot exfiltrate them as "reference audio"."""
     p = Path(path).expanduser()
+    try:
+        from agent.file_safety import get_read_block_error
+        blocked = get_read_block_error(str(p))
+    except ImportError:
+        blocked = None
+    if blocked:
+        raise ValueError(blocked)
+    if p.suffix.lower() not in _AUDIO_SUFFIXES:
+        raise ValueError(f"{path} is not an audio file ({', '.join(sorted(_AUDIO_SUFFIXES))}).")
     if not p.is_file():
         raise ValueError(f"reference audio not found: {path}")
     if p.stat().st_size > _MAX_REFERENCE_BYTES:
@@ -253,7 +265,8 @@ class FishTools:
         else:
             path = _audio_dir() / f"fish_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S_%f')}{ext}"
         rendered = speech.render(settings, request, str(path), timestamps=bool(args.get("timestamps")))
-        voice_bubble = fmt == "opus" and platform in _VOICE_PLATFORMS and path.read_bytes()[:4] == b"OggS"
+        with open(path, "rb") as fh:
+            voice_bubble = fmt == "opus" and platform in _VOICE_PLATFORMS and fh.read(4) == b"OggS"
         result: Dict[str, Any] = {
             "file_path": str(path), "media_tag": _media_tag(str(path), voice_bubble), "model": request.model,
             "voices": request.body.get("reference_id"), "requests": rendered["requests"], "bytes": rendered["bytes"],

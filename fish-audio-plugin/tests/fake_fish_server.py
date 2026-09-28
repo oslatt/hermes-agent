@@ -57,6 +57,7 @@ class FakeFishServer:
         self.requests: List[Recorded] = []
         self.faults: List[Tuple[int, Any]] = []   # (status, body) served before normal handling
         self.transcript = "Hello from the fake Fish server."
+        self.echo_asr = False  # ASR "hears" the words of the latest TTS request (live-harness self-test)
         self.voices: Dict[str, Dict[str, Any]] = {}
         self._server: Optional[ThreadingHTTPServer] = None
         self._lock = threading.Lock()
@@ -140,7 +141,8 @@ def validate_tts(model: str, body: Dict[str, Any], content_type: str) -> Optiona
 
 
 def audio_for(body: Dict[str, Any]) -> bytes:
-    seconds = max(0.2, len(body.get("text", "")) / 60)
+    speed = float((body.get("prosody") or {}).get("speed", 1.0))
+    seconds = max(0.2, len(BRACKET_RE.sub("", body.get("text", ""))) / 60 / speed)
     fmt = body.get("format", "mp3")
     rate = int(body.get("sample_rate") or (48000 if fmt == "opus" else 44100))
     if fmt == "pcm":
@@ -270,7 +272,12 @@ def _handler(server: FakeFishServer):
         if not files.get("audio"):
             return h._send(*_validation("audio", "field required"))
         text = server.transcript
-        if model == "transcribe-1-pro":
+        spoken = [r for r in server.requests if r.path.startswith("/v1/tts") and isinstance(r.body, dict)]
+        if server.echo_asr and spoken:
+            cue_re = re.compile(r"\([^()]+\)") if spoken[-1].model == "s1" else BRACKET_RE  # the model's native cues
+            said = cue_re.sub(" ", re.sub(r"<\|phoneme_start\|>.*?<\|phoneme_end\|>", " ", spoken[-1].body["text"]))
+            text = said if model == "transcribe-1-pro" else SPEAKER_RE.sub(" ", said)
+        elif model == "transcribe-1-pro":
             text = f"<|speaker:0|>{text}<|speaker:1|>[laughter] Indeed."
         h._send(200, {"text": text, "duration": 1.5, "segments": [], "language_code": "en", "language": "English"})
 

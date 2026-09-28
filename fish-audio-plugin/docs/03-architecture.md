@@ -11,6 +11,8 @@ Three layers make that possible without the model knowing Fish's API:
    pacing and loudness, pronunciation, zero-shot cloning, voice search/cloning/design, timestamps.
 3. **Knowledge layer** (teaches the model): a short system-prompt section frozen per session, four
    on-demand skills (the `voice.md` capability library), tool descriptions, and tool-result hints.
+   Hermes defers plugin tools behind Tool Search, so the section also says how to reach them
+   (`tool_describe` then `tool_call`).
 
 ```
                     ┌───────────── knowledge ─────────────┐
@@ -30,8 +32,8 @@ Three layers make that possible without the model knowing Fish's API:
 
 | File | Responsibility |
 |---|---|
-| `plugin.yaml` | Manifest v2: tools, `config_schema` (settings + `FISH_API_KEY` secret), `python_dependencies` (`msgpack`, only for inline reference audio). |
-| `__init__.py` | `register(ctx)`: providers, tools, skills, system prompt section. |
+| `plugin.yaml` | Manifest v2: tools, `config_schema` (settings), rich `requires_env` for `FISH_API_KEY`, `python_dependencies` (`msgpack`, only for inline reference audio). |
+| `__init__.py` | `register(ctx)`: providers, tools, skills, system prompt section. Internals live in the `fish_audio/` subpackage so plugin module names never shadow Hermes packages (`tools`, `models`). |
 | `fish_audio/models.py` | Model capability table: id, family, cue syntax, multi-speaker, languages, pricing tier, status. Single source for validation, prompt text and docs. |
 | `fish_audio/markup.py` | Cue compiler: S2 `[cue]` ↔ S1 `(tag)` translation, placement lint, `instructions` → leading cue, dialogue assembly (`lines` → `<\|speaker:N\|>`), speaker carry-over across chunks, control-token protection/repair. Pure functions. |
 | `fish_audio/client.py` | Minimal HTTP client (httpx, already a Hermes core dep): TTS (file and chunked stream), SSE timestamps, ASR, voices, voice design, credit. Typed `FishAudioError` with status, retry on 429/5xx with backoff, clear messages for 401/402/404/422. |

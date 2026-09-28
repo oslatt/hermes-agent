@@ -7,45 +7,34 @@ Runs against an importable Hermes checkout (``PYTHONPATH=<hermes-agent>``) and i
 
 from __future__ import annotations
 
-import os
-import shutil
 import sys
 from pathlib import Path
-from typing import Any, Dict
 
 import pytest
 
 HERE = Path(__file__).resolve().parent
-PLUGIN_ROOT = HERE.parent
 sys.path.insert(0, str(HERE))
 
 from fake_fish_server import FakeFishServer  # noqa: E402
-
-API_KEY = "fish-test-key"
-PLUGIN_NAME = "fish-audio"
+from harness import API_KEY, PLUGIN_NAME, install_plugin, write_config  # noqa: E402,F401
 
 
-def install_plugin(home: Path) -> Path:
-    target = home / "plugins" / PLUGIN_NAME
-    shutil.copytree(PLUGIN_ROOT, target, ignore=shutil.ignore_patterns("tests", "docs", "__pycache__", "*.pyc"))
-    return target
+def pytest_addoption(parser):
+    group = parser.getgroup("fish-audio live")
+    group.addoption("--live", action="store_true", help="run tests/live against the real Fish Audio API")
+    group.addoption("--live-model", default="s2.1-pro-free", help="TTS model for live scenarios")
+    group.addoption("--live-design", action="store_true", help="also run billed voice-design scenarios")
+    group.addoption("--live-against-fake", action="store_true",
+                    help="self-test the live harness against the fake server (echo listener, no network)")
 
 
-def write_config(home: Path, base_url: str, settings: Dict[str, Any] | None = None, extra: str = "") -> None:
-    import hermes_yaml as yaml
-    config = {
-        "plugins": {"enabled": [PLUGIN_NAME],
-                    "entries": {PLUGIN_NAME: {"settings": {"base_url": base_url, **(settings or {})}}}},
-        "tts": {"provider": PLUGIN_NAME},
-        "stt": {"provider": PLUGIN_NAME},
-    }
-    (home / "config.yaml").write_text(yaml.safe_dump(config) + extra, encoding="utf-8")
-    try:  # drop Hermes's in-process config caches so the next read sees this file
-        from hermes_cli import config as hermes_config
-        hermes_config._LOAD_CONFIG_CACHE.clear()
-        hermes_config._RAW_CONFIG_CACHE.clear()
-    except (ImportError, AttributeError):
-        pass
+def pytest_collection_modifyitems(config, items):
+    if config.getoption("--live"):
+        return
+    skip = pytest.mark.skip(reason="live Fish Audio test; pass --live (needs FISH_API_KEY)")
+    for item in items:
+        if "live" in item.keywords:
+            item.add_marker(skip)
 
 
 @pytest.fixture(scope="session")
@@ -84,7 +73,7 @@ def hermes(tmp_path_factory, fish_server):
 
     ns = NS()
     ns.home, ns.root, ns.server, ns.manager, ns.plugins, ns.package = home, root, fish_server, manager, loaded, package
-    ns.configure = lambda settings=None, extra="": write_config(home, fish_server.base_url, settings, extra)
+    ns.configure = lambda settings=None, extra="", tts=None: write_config(home, fish_server.base_url, settings, extra, tts)
     yield ns
     mp.undo()
 

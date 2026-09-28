@@ -1,6 +1,7 @@
 """``fish_speak`` through Hermes's real tool dispatch against the contract-checking fake server."""
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -93,7 +94,7 @@ def test_long_script_is_split_and_stitched_into_one_file(fish, voices, tmp_path)
 def test_timestamps_are_written_next_to_the_audio(fish, voices, tmp_path):
     out = speak(text="[warm] Hello there friend.", timestamps=True, output_path=str(tmp_path / "t.mp3"))
     assert out["success"], out
-    words = json.loads(open(out["timestamps_path"]).read())
+    words = json.loads(Path(out["timestamps_path"]).read_text(encoding="utf-8"))
     assert [w["text"] for w in words] == ["Hello", "there", "friend."]
     assert words == sorted(words, key=lambda w: w["start"])
 
@@ -143,3 +144,12 @@ def test_zero_shot_dialogue_groups_references_per_speaker(fish, voices, tmp_path
     body = fish.server.tts_requests()[-1].body
     assert body["reference_id"] == [voices["Warm Narrator"], "speaker-1"]
     assert body["references"] == [[], [{"audio": clip.read_bytes(), "text": "Guest sample."}]]
+
+
+@pytest.mark.parametrize("target", [".env", "notes.txt"])
+def test_reference_audio_never_uploads_secrets_or_non_audio(fish, voices, target):
+    path = fish.home / target
+    path.write_text("FISH_API_KEY=secret\n")
+    out = speak(text="Hi.", reference_audio=[{"path": str(path), "transcript": "x"}])
+    assert not out["success"]
+    assert fish.server.tts_requests() == []

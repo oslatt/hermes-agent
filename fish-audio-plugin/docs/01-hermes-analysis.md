@@ -83,9 +83,11 @@ The plugin receives `model`, `language`, `prompt`.
 
 1. Tool schemas (names, descriptions, parameter docs) are always visible while the plugin is enabled.
 2. A system prompt section (frozen per session) can announce the capability and point at skills.
-3. Skills are pulled on demand with `skill_view("<plugin>:<skill>")`; the section must say so,
+3. Plugin tools usually sit behind Tool Search (L7): the model discovers them from the `tool_search`
+   listing (name + first 500 chars of the description) and calls them via `tool_call`.
+4. Skills are pulled on demand with `skill_view("<plugin>:<skill>")`; the section must say so,
    because plugin skills are absent from `<available_skills>`.
-4. Tool results can carry hints (warnings, next steps) that the agent reads in-loop.
+5. Tool results can carry hints (warnings, next steps) that the agent reads in-loop.
 
 ## 1.7 Speech functionality Hermes already exposes
 
@@ -104,6 +106,9 @@ xAI/Gemini auxiliary tag rewriting.
 | L4 | The model cannot pick a voice or model per call; single-voice only. | `TTS_SCHEMA` | Casting, dialogue and model switching need plugin tools. |
 | L5 | Provider-agnostic 4000-char cap and splitting are unaware of speaker tokens. | `tts_tool_delivery.py` | A split dialogue chunk loses its current speaker unless the provider carries it over. |
 | L6 | No voice library/cloning/design concepts in core. | n/a | Belongs in the plugin (footprint ladder: plugin rung). |
+
+| L7 | Plugin tools are **deferred by Tool Search** (`tools/tool_search.py`, `enabled: auto` activates whenever any plugin/MCP tool exists): the model sees them only in the `tool_search` listing and invokes them through `tool_describe` + `tool_call`, which validates arguments against the plugin's schema. | `model_tools._dispatch_bridge_tool` | Found by the agent-loop E2E test. The plugin's prompt section tells the model how to reach `fish_speak`; schemas stay strict and self-explanatory because many calls skip `tool_describe`. By design, not a defect. |
+| L8 | `plugins.entries.<id>.settings` rejects the keys `model`, `plugins`, `security`, `settings`. | `hermes_cli/plugins_state.py` | The model setting is `tts_model`. |
 
 L1 to L3 are generic defects in the plugin surface (they affect every expressive plugin, not only
 Fish), so they are fixed in core as small additive changes; L4 to L6 are solved inside the plugin.

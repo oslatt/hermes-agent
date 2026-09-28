@@ -103,7 +103,8 @@ actionable message · Test: 401/402/404/422/429/500 mapping and retry counts.
 
 ## M12: Automated tests
 
-**T12.1 ✅ Unit + contract** · `tests/test_markup.py`, `tests/test_client.py`, `tests/test_tools.py`,
+**T12.1 ✅ Unit + contract** · `tests/test_markup.py`, `tests/test_speak_tool.py`, `tests/test_voices_tool.py`,
+`tests/test_hermes_speech_paths.py`, `tests/test_profiles.py` (A→B→A multiplex), `tests/test_scenario_checks.py`,
 with `tests/fake_fish_server.py` (a loopback server that validates requests against the documented
 contract and records them).
 
@@ -116,10 +117,10 @@ contract and records them).
 + the fake Fish server: tool schemas offered, system prompt section present, skills load, audio files
 produced, requests correct.
 
-**T13.3 🔒 Live scenario suite** · `tests/live/` gated on `FISH_API_KEY`: neutral narration, emotional
+**T13.3 🔒 Live scenario suite** (built; harness self-tested with `--live-against-fake`) · `tests/live/` gated on `FISH_API_KEY`: neutral narration, emotional
 delivery, dialogue, pacing/intensity, pronunciation, conversational replies, long-form, streaming,
 model switching, errors; round-trips audio through Fish ASR to check the words; writes a report.
 
-**T13.4 🔒 Real-model behavior loop** · `tests/live/agent_scenarios.py`: prompts a real Hermes model
+**T13.4 🔒 Real-model behavior loop** (built; runner self-tested with `--reference`) · `tests/live/run_agent_scenarios.py` + `scenarios.py`: prompts a real Hermes model
 (user's configured provider) with the scenario prompts against the fake Fish server and scores whether
 the model chose the right tool, cues, voices and syntax. Run in loops; fix skills/prompt text; repeat.

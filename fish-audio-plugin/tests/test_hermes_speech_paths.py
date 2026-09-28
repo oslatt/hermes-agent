@@ -82,3 +82,44 @@ def test_every_skill_resolves_through_skill_view(fish):
     for name in ("voice-direction", "dialogue", "pronunciation", "voices"):
         out = json.loads(handle_function_call("skill_view", {"name": f"fish-audio:{name}"}))
         assert out.get("success", True) and "## Procedure" in json.dumps(out), name
+
+
+def _rewrite_to(monkeypatch, reply):
+    calls = []
+
+    def fake_complete(self, messages, **kw):
+        calls.append(messages)
+        from types import SimpleNamespace
+        if isinstance(reply, Exception):
+            raise reply
+        return SimpleNamespace(text=reply)
+
+    monkeypatch.setattr("agent.plugin_llm.PluginLlm.complete", fake_complete)
+    return calls
+
+
+def test_auto_expressive_adds_cues_only_to_untagged_speech(fish, tmp_path, monkeypatch):
+    fish.configure({"auto_expressive": True})
+    calls = _rewrite_to(monkeypatch, "[warm] Good morning. [excited] The results are in!")
+    say = lambda text: json.loads(handle_function_call("text_to_speech", {"text": text, "output_path": str(tmp_path / "a.mp3")}))  # noqa: E731
+    assert say("Good morning. The results are in!")["success"]
+    assert fish.server.tts_requests()[-1].body["text"] == "[warm] Good morning. [excited] The results are in!"
+    assert say("[sad] Already directed.")["success"]
+    assert len(calls) == 1 and fish.server.tts_requests()[-1].body["text"] == "[sad] Already directed."
+
+
+def test_auto_expressive_never_changes_the_words(fish, tmp_path, monkeypatch):
+    fish.configure({"auto_expressive": True})
+    for reply in ("[warm] Good morning, friend. The results are in!", RuntimeError("llm down")):
+        _rewrite_to(monkeypatch, reply)
+        out = json.loads(handle_function_call("text_to_speech", {"text": "Good morning. The results are in!",
+                                                                 "output_path": str(tmp_path / "b.mp3")}))
+        assert out["success"] and fish.server.tts_requests()[-1].body["text"] == "Good morning. The results are in!"
+
+
+def test_a_leftover_voice_from_another_engine_falls_back_to_the_fish_default(fish, tmp_path):
+    default = next(iter(fish.server.voices))
+    fish.configure({"voice": default}, tts={"voice": "en-US-AriaNeural"})
+    out = json.loads(handle_function_call("text_to_speech", {"text": "Hello.", "output_path": str(tmp_path / "v.mp3")}))
+    assert out["success"], out
+    assert fish.server.tts_requests()[-1].body["reference_id"] == default

@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-from conftest import API_KEY, PLUGIN_NAME, install_plugin
+from harness import API_KEY, PLUGIN_NAME, install_plugin
 
 fake_llm = pytest.importorskip("tests.fakes.fake_llm_provider", reason="needs the Hermes checkout's test fakes")
 
@@ -123,3 +123,26 @@ def test_agent_recovers_from_an_unknown_voice_by_searching_and_saving_one(agent_
     assert searched["voices"][0]["id"] == captain
     final = _payload(requests[4])
     assert final["success"] and fish_server.tts_requests()[-1].body["reference_id"] == captain
+
+
+def test_plain_voice_reply_gets_cues_from_the_host_model_when_auto_expressive(agent_home, fish_server):
+    start, _ = agent_home
+    tagged = "[warm] Good morning. [excited] The results are in!"
+
+    def aux(record):  # the plugin's rewrite asks the user's own model; titles etc. also land here
+        system = json.dumps(record["body"].get("messages", [{}])[0])
+        return fake_llm.Text(tagged if "voice actor" in system else "Morning results")
+
+    turns = [fake_llm.ToolCall("text_to_speech", {"text": "Good morning. The results are in!"}), fake_llm.Text("Sent.")]
+    with fake_llm.FakeLLMServer(turns, aux=aux) as llm:
+        root = start(llm.base_url)
+        import hermes_yaml as yaml
+        cfg_path = root / ".hermes" / "config.yaml"
+        cfg = yaml.safe_load(cfg_path.read_text(encoding="utf-8"))
+        cfg["plugins"]["entries"][PLUGIN_NAME]["settings"]["auto_expressive"] = True
+        cfg_path.write_text(yaml.safe_dump(cfg), encoding="utf-8")
+        proc = _run_chat(root, "Tell me the results are in, by voice.")
+        assert proc.returncode == 0, proc.stderr[-3000:]
+        rewrites = [r for r in llm.aux_requests() if "voice actor" in json.dumps(r.get("messages", [{}])[0])]
+    assert len(rewrites) == 1
+    assert fish_server.tts_requests()[-1].body["text"] == tagged

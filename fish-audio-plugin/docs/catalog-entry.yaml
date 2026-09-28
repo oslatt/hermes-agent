@@ -1,0 +1,21 @@
+# Draft for hermes-agent/plugin-catalog/fish-audio.yaml. Submit from the plugin repository owner
+# (catalog rule 5) once the standalone repo exists; `sha` must be the reviewed 40-hex commit.
+name: fish-audio
+repo: https://github.com/fishaudio/hermes-fish-audio
+sha: 0000000000000000000000000000000000000000
+description: Expressive Fish Audio speech for Hermes - emotion cues, multi-voice dialogue, cloning, voice design, pronunciation, streaming, and STT, with skills that teach the agent to direct a performance.
+maintainer: fishaudio
+tier: official
+category: voice
+# requires_hermes: set to the first Hermes release containing "feat(tts): plugin providers get
+#   instructions, PCM streaming, and intact control tokens" (the plugin degrades gracefully without it)
+docs_url: https://github.com/fishaudio/hermes-fish-audio#readme
+version: "0.1.0"
+capabilities:
+  provides_tools:
+    - fish_speak
+    - fish_voices
+  provides_hooks: []
+  provides_middleware: []
+  requires_env:
+    - FISH_API_KEY
