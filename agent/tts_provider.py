@@ -61,16 +61,24 @@ class TTSProvider(CatalogProviderBase):
     ) -> Iterator[bytes]:
         """Stream synthesized audio bytes (optional).
 
-        Default raises :class:`NotImplementedError`; the dispatcher then falls
-        back to :meth:`synthesize` + read-whole-file. ``format`` defaults to
-        ``opus`` because the primary streaming consumer is voice-bubble
-        delivery (Telegram et al.), which requires Opus.
+        Default raises :class:`NotImplementedError`. ``format="pcm"`` means raw
+        int16 little-endian mono at ``extra["sample_rate"]``; that is the only
+        form Hermes requests, and only from providers that set
+        :attr:`supports_pcm_stream`.
         """
         raise NotImplementedError(
             f"TTS provider {self.name!r} does not implement streaming "
             "synthesis. Use synthesize() instead, or implement stream() "
             "if your backend supports it."
         )
+
+    @property
+    def supports_pcm_stream(self) -> bool:
+        """Opt in to the low-latency speech consumers (voice mode, gateway streaming, dashboard
+        speak-stream): they call :meth:`stream` with ``format="pcm"`` and ``sample_rate`` per
+        sentence and play chunks as they arrive. False keeps the per-sentence :meth:`synthesize`
+        path. Default False."""
+        return False
 
     def warm(self) -> None:
         """Speech output was just turned on; pre-load so the first reply is hot.

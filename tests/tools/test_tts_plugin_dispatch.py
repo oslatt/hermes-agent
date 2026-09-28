@@ -225,3 +225,25 @@ class TestVoiceCompatibleHelper:
 
         tts_registry.register_provider(_ExplodingProvider(name="cartesia"))
         assert tts_tool._plugin_provider_is_voice_compatible("cartesia") is False
+
+
+class TestInstructionsReachPlugin:
+    """``text_to_speech(instructions=...)`` is delivery direction; expressive plugin backends (Fish Audio
+    S2 bracket cues, voice-design servers) need it as much as the OpenAI built-in does."""
+
+    def test_instructions_forwarded_through_the_tool(self, tmp_path, monkeypatch):
+        provider = _FakeTTSProvider(name="cartesia")
+        tts_registry.register_provider(provider)
+        monkeypatch.setattr(tts_tool, "_load_tts_config", lambda: {"provider": "cartesia"})
+
+        def _write(text, output_path, **kw):
+            provider.last_call = {"text": text, "output_path": output_path, "kwargs": dict(kw)}
+            with open(output_path, "wb") as fh:
+                fh.write(b"ID3" + b"\0" * 64)
+            return output_path
+
+        provider.synthesize = _write
+        out = tts_tool.text_to_speech_tool(
+            "Hello there.", output_path=str(tmp_path / "o.mp3"), instructions="warm, amused whisper")
+        assert '"success": true' in out
+        assert provider.last_call["kwargs"].get("instructions") == "warm, amused whisper"

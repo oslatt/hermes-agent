@@ -31,7 +31,9 @@ def _lookup_plugin_provider(key: str, *, discover: bool = True, retry: bool = Fa
     return plugin_provider
 
 
-def _dispatch_to_plugin_provider(text: str, output_path: str, provider: str, tts_config: Dict[str, Any]) -> Optional[str]:
+def _dispatch_to_plugin_provider(
+    text: str, output_path: str, provider: str, tts_config: Dict[str, Any], instructions: Optional[str] = None,
+) -> Optional[str]:
     """Route to a plugin-registered TTS provider; None means "fall through".
 
     Invariants re-checked here so a caller refactor can't break them: built-in names never reach
@@ -57,7 +59,9 @@ def _dispatch_to_plugin_provider(text: str, output_path: str, provider: str, tts
     if plugin_provider is None:
         return None
     # voice/model/speed/format are optional per TTSProvider.synthesize; providers default on None.
+    # ``instructions`` (delivery direction) rides in ``**extra``, which providers must tolerate.
     cfg = tts_config if isinstance(tts_config, dict) else {}
+    extra = {"instructions": instructions} if isinstance(instructions, str) and instructions.strip() else {}
     voice, model, speed = cfg.get("voice"), cfg.get("model"), cfg.get("speed")
     fmt = cfg.get("output_format", DEFAULT_COMMAND_TTS_OUTPUT_FORMAT)
     logger.info("Generating speech with plugin TTS provider '%s'...", key)
@@ -65,7 +69,7 @@ def _dispatch_to_plugin_provider(text: str, output_path: str, provider: str, tts
         text, output_path, voice=voice if isinstance(voice, str) and voice else None,
         model=model if isinstance(model, str) and model else None,
         speed=float(speed) if isinstance(speed, (int, float)) else None,
-        format=str(fmt).lower() if fmt else "mp3")
+        format=str(fmt).lower() if fmt else "mp3", **extra)
     return written if isinstance(written, str) and written else output_path
 
 

@@ -219,14 +219,31 @@ def flatten_newlines_for_payload(text: str) -> str:
     return text.strip()
 
 
+# Model control tokens (``<|speaker:0|>``, ``<|phoneme_start|>``) are speech syntax, not Markdown: the
+# table-pipe and underscore-italic rules would otherwise turn them into "<; speaker:0; >". Each token is
+# parked on one private-use character for the duration of the pipeline; no step matches that range.
+_CONTROL_TOKEN_RE = re.compile(r"<\|[A-Za-z0-9_.:-]{1,64}\|>")
+_TOKEN_SLOT_BASE = 0xF0000  # Supplementary Private Use Area-A
+
+
 def prepare_spoken_text(text: str, max_chars: int | None = 4000) -> str:
     """Return a TTS-friendly script from assistant text (deterministic cleanup, not a rewrite).
     Pipeline: non-spoken blocks > Markdown > symbols/units > line formatting into sentence
-    pauses > single line (for newline-sensitive providers), then ``max_chars``."""
-    spoken = text
+    pauses > single line (for newline-sensitive providers), then ``max_chars``. Model control
+    tokens pass through verbatim."""
+    tokens: list[str] = []
+
+    def _park(match: re.Match) -> str:
+        tokens.append(match.group(0))
+        return chr(_TOKEN_SLOT_BASE + len(tokens) - 1)
+
+    spoken = _CONTROL_TOKEN_RE.sub(_park, text or "")
     for step in (strip_nonspoken_blocks, strip_markdown_for_tts, normalize_symbols_for_tts,
                  smooth_whitespace_for_tts, flatten_newlines_for_payload):
         spoken = step(spoken)
+    if tokens:
+        spoken = re.sub(f"[{chr(_TOKEN_SLOT_BASE)}-{chr(_TOKEN_SLOT_BASE + len(tokens) - 1)}]",
+                        lambda m: tokens[ord(m.group(0)) - _TOKEN_SLOT_BASE], spoken)
     if max_chars is not None and max_chars > 0 and len(spoken) > max_chars:
         spoken = spoken[:max_chars].rstrip()
     return spoken

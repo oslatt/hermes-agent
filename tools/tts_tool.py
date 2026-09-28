@@ -357,7 +357,7 @@ def _text_to_speech_single(
         # bottom. The dispatcher itself enforces built-ins-always-win + command-wins-over-plugin
         # defensively.
         elif provider not in BUILTIN_TTS_PROVIDERS and (
-            _plugin_path := _dispatch_to_plugin_provider(text, file_str, provider, tts_config)
+            _plugin_path := _dispatch_to_plugin_provider(text, file_str, provider, tts_config, instructions)
         ) is not None:
             file_str = _plugin_path
         else:
@@ -627,7 +627,8 @@ TTS_SCHEMA = {
                     "Optional voice-design guidance: tone, emotion, pacing, accent, "
                     "whispering, impressions (e.g. 'Speak in a cheerful, excited whisper'). "
                     "Forwarded to the OpenAI backend (gpt-4o-mini-tts and OpenAI-compatible "
-                    "voice-design servers). Silently ignored by backends that don't support it."
+                    "voice-design servers) and to plugin providers. Silently ignored by backends "
+                    "that don't support it."
                 )
             },
             "provider": {

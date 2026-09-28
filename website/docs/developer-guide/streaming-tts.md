@@ -83,6 +83,14 @@ The ABC enforces the contract; the registry makes the provider discoverable;
 the dispatcher (`stream_tts_to_speaker`) and the gateway consumer handle the
 sentence buffer, stop events, and audio sink for free.
 
+**Plugin providers** do not subclass `StreamingTTSProvider`. A plugin
+`TTSProvider` (`ctx.register_tts_provider`) that sets `supports_pcm_stream`
+is wrapped by `_PluginPCMStreamer` when it is the configured `tts.provider` (or
+the pinned `tts.streaming.provider`): each sentence becomes
+`provider.stream(text, voice=, model=, format="pcm", sample_rate=24000)`,
+capped like the built-ins. Built-in names always resolve to the built-in
+streamer.
+
 ## Gateway streaming (platform adapters)
 
 `gateway/streaming_tts_consumer.py` bridges agent deltas to an adapter's

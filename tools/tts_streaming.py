@@ -14,10 +14,11 @@ import logging
 import re
 import time
 from abc import ABC, abstractmethod
-from typing import Callable, Dict, Iterator, List, Optional
+from typing import Any, Callable, Dict, Iterator, List, Optional
 
 from agent.think_scrubber import THINK_TAG_NAMES
 from tools.tool_backend_helpers import resolve_openai_audio_api_key
+from tools.tts_command_provider import BUILTIN_TTS_PROVIDERS
 from tools.tts_tool import _get_provider, _load_tts_config
 from tools.tts_tool_providers import DEFAULT_XAI_SAMPLE_RATE
 
@@ -152,10 +153,48 @@ def register(name: str) -> Callable[[type[StreamingTTSProvider]], type[Streaming
     return _wrap
 
 
+class _PluginPCMStreamer(StreamingTTSProvider):
+    """A plugin :class:`agent.tts_provider.TTSProvider` that opted in via ``supports_pcm_stream``,
+    asked for PCM at this streamer's ``sample_rate`` with the configured voice/model."""
+
+    def __init__(self, provider: Any, tts_config: Dict):
+        super().__init__(tts_config, {})
+        self.provider = provider
+
+    @staticmethod
+    def available() -> bool:
+        return True
+
+    def stream(self, text: str) -> Iterator[bytes]:
+        voice, model = self.tts_config.get("voice"), self.tts_config.get("model")
+        yield from _capped(self.provider.stream(
+            text, voice=voice if isinstance(voice, str) and voice else None,
+            model=model if isinstance(model, str) and model else None,
+            format="pcm", sample_rate=self.sample_rate), f"plugin TTS {self.provider.name!r}")
+
+
+def _plugin_streamer(name: str, tts_config: Dict) -> Optional[StreamingTTSProvider]:
+    """Streamer for a plugin provider named *name* that opted in to PCM streaming, else None."""
+    if not name or name in BUILTIN_TTS_PROVIDERS:
+        return None
+    try:
+        from tools.tts_tool_plugins import _lookup_plugin_provider
+        provider = _lookup_plugin_provider(name)
+        if provider is None or not provider.supports_pcm_stream or not provider.is_available():
+            return None
+    except Exception as exc:  # noqa: BLE001 — a broken plugin must not break speech
+        logger.debug("plugin streaming provider %s unavailable: %s", name, exc)
+        return None
+    return _PluginPCMStreamer(provider, tts_config)
+
+
 def _try_instantiate(name: str, tts_config: Dict) -> Optional[StreamingTTSProvider]:
-    """Construct the registered streamer *name* if it's usable, else None."""
+    """Construct the registered streamer *name* if it's usable, else None (built-ins first, then an
+    opted-in plugin provider)."""
     cls = _REGISTRY.get(name)
-    if cls is None or not cls.available():
+    if cls is None:
+        return _plugin_streamer(name, tts_config)
+    if not cls.available():
         return None
     try:
         return cls(tts_config, tts_config.get(name) or {})

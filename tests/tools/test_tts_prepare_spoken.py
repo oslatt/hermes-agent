@@ -139,3 +139,17 @@ class TestSharedCleanerWiring:
         spoken = adapter.prepare_tts_text("<think>plan</think>Hello there")
         assert "plan" not in spoken
         assert "Hello there" in spoken
+
+
+class TestModelControlTokens:
+    """``<|name|>`` / ``<|name:arg|>`` tokens are model control syntax (Fish Audio speaker turns and
+    phoneme spans), not Markdown: the table-pipe and underscore-italic rules must not rewrite them."""
+
+    def test_control_tokens_survive_while_table_pipes_still_pause(self):
+        raw = ("<|speaker:0|>We deploy with <|phoneme_start|>K UW2 B ER0 N EH1 T IY0 Z<|phoneme_end|>."
+               "<|speaker:1|>Nice | really nice")
+        spoken = prepare_spoken_text(raw)
+        for token in ("<|speaker:0|>", "<|speaker:1|>", "<|phoneme_start|>", "<|phoneme_end|>"):
+            assert token in spoken
+        assert "K UW2 B ER0 N EH1 T IY0 Z" in spoken
+        assert "Nice; really nice" in spoken
